@@ -1,0 +1,24 @@
+@startuml Context
+
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+' === Участники ===
+Person(director, "Директор хозяйства", "Управление через веб-портал")
+Person(mechanic, "Механик", "Мониторинг техники")
+Person(analyst, "Аналитик", "Работа с BI-системой")
+
+
+System_Boundary(context, "Контур платформы") {
+    Person(employee, "Дежурный сотрудник платформы", "Управление платформой")
+    System(platform, "Платформа для мониторинга скота")
+}
+
+' === Взаимосвязи ===
+Rel(employee, platform, "Реагирует на неисправности платформы")
+Rel(platform, employee, "Отправляет уведомления")
+
+Rel(director, platform, "Имеет доступ")
+Rel(mechanic, platform, "Реагирует на неисправности техники")
+Rel(analyst, platform, "Собирает и анализирует метрики")
+
+@enduml
