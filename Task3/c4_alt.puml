@@ -1,0 +1,19 @@
+@startuml Code
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+
+System_Boundary(iot, "IoT Gateway") {
+
+    Component(mqtt_broker, "MqttBroker", "MQTT", "Приём телеметрии от устройств")
+    Component(flow, "NodeRED Flows", "Node-RED", "Фильтры/нормализация сигналов")
+    Component(transform, "TransformNode", "JS/Python", "Конвертация протоколов")
+    Component(retry_buf, "LocalBuffer", "SQLite/FS", "Хранение при пропадании интернета")
+    Component(kafka_writer, "KafkaWriter", "Kafka Producer", "MQTT - Kafka мост")
+
+    Rel(mqtt_broker, flow, "MQTT сообщения")
+    Rel(flow, transform, "Нормализация событий")
+    Rel(transform, retry_buf, "Буфферинг")
+    Rel(transform, kafka_writer, "Отправляет в Kafka")
+}
+
+@enduml
