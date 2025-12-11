@@ -1,0 +1,35 @@
+@startuml Container
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+Person(director, "Директор хозяйства")
+Person(mechanic, "Механик")
+Person(analyst, "Аналитик")
+Person(operator, "Дежурный сотрудник платформы")
+
+System_Boundary(platform, "АгроПром Х - Контейнеры (альтернатива)") {
+  Container(api_gw, "API Gateway", "NGINX / Envoy", "Ingress + auth")
+  Container(auth, "Auth Service", "Keycloak / OpenID Connect", "SSO и RBAC")
+  Container(iot_gateway, "IoT Gateway", "Node-RED / Mosquitto", "MQTT broker и локальная агрегация")
+  Container(kafka, "Event Streaming", "Apache Kafka / Confluent", "Высокая пропускная способность и ретеншн")
+  Container(stream_proc, "Stream Processing", "Kafka Streams / Flink", "Real-time аналитика и ML-инференс")
+  Container(storage_ts, "TimeSeries DB", "ClickHouse / TimescaleDB", "Хранение метрик")
+  Container(object_store, "Object Storage", "S3/GCS", "Видео и большие артефакты")
+  Container(notification, "Notification Service", "Kubernetes + Serverless", "Оповещения")
+  Container(bi, "BI / Reporting", "Metabase / Power BI Connector", "Сложная аналитика и истории")
+  Container(monitoring, "Monitoring & Observability", "Prometheus + Grafana + Jaeger", "SLO/ALERTS")
+}
+
+Rel(director, bi, "Доступ к отчётам")
+Rel(analyst, bi, "Глубокий анализ")
+Rel(mechanic, api_gw, "Просмотр статуса")
+Rel(operator, monitoring, "Оперативный мониторинг")
+
+Rel(iot_gateway, kafka, "Публикация телеметрии (MQTT->Kafka)")
+Rel(api_gw, kafka, "Публикация событий / API -> Kafka")
+Rel(kafka, stream_proc, "Event streams для обработки")
+Rel(stream_proc, storage_ts, "Агрегация метрик")
+Rel(stream_proc, object_store, "Секция видео / записи")
+Rel(stream_proc, notification, "Триггер оповещений")
+Rel(storage_ts, bi, "Источник данных для BI")
+
+@enduml

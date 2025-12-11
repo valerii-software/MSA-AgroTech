@@ -1,0 +1,34 @@
+@startuml Context
+
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+System_Boundary(платформа, "АгроПром Х - Цифровая платформа") {
+    System_Boundary(context, "Контур платформы") {
+        Person(employee, "Дежурный сотрудник платформы", "Управление платформой")
+        System(platform, "Платформа для мониторинга скота")
+    }
+
+    Person(director, "Директор хозяйства", "Управление через веб-портал")
+    Person(mechanic, "Механик", "Мониторинг техники")
+    Person(analyst, "Аналитик", "Работа с BI-системой")
+
+    System(bi, "BI система", "Power BI", "Отчеты и визуализация")
+    System(iot_шлюз, "IoT шлюз", "Node-RED", "Сбор данных со свинофермы")
+
+    System(kafka, "Брокер сообщений", "Apache Kafka", "Шина данных")
+}
+
+' === Взаимосвязи ===
+Rel(platform, kafka, "Публикация данных")
+
+Rel(bi, iot_шлюз, "Агрегация данных")
+Rel(iot_шлюз, kafka, "Сбор данных с платформы")
+
+Rel(employee, platform, "Реагирует на неисправности платформы")
+Rel(platform, employee, "Отправляет уведомления")
+
+Rel(director, bi, "Имеет доступ")
+Rel(analyst, bi, "Собирает и анализирует метрики")
+Rel(mechanic, platform, "Реагирует на неисправности техники")
+
+@enduml

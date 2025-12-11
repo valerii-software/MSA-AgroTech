@@ -1,0 +1,63 @@
+@startuml SaaS-Context
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+
+title Финальная архитектура SaaS-платформы АгроПром Х
+
+Person(small_client, "Малый клиент", "Агрохолдинг с 1-5 фермами (Schema-per-tenant)")
+Person(medium_client, "Средний клиент", "Агрохолдинг с 5-20 фермами (Database-per-tenant)")
+Person(enterprise_client, "Enterprise клиент", "Крупный агрохолдинг 20+ ферм (Instance-per-tenant)")
+
+Person(director, "Директор хозяйства", "Управление через портал")
+Person(analyst, "Аналитик", "Отчёты и аналитика")
+Person(mechanic, "Механик", "Реагирует на неисправности")
+
+Person_Ext(saas_admin, "SaaS Администратор", "Управление платформой и клиентами")
+Person_Ext(support, "Служба поддержки", "Помощь клиентам")
+
+System_Boundary(saas_platform, "SaaS-платформа АгроПром Х") {
+    System(core_platform, "Платформа мониторинга", "Мультитенантная система, мониторинга скота и техники")
+}
+
+System_Ext(client_erp, "ERP клиента", "1С, SAP и др.")
+System_Ext(client_analytics, "BI-система клиента", "Power BI")
+
+System_Ext(farm_iot, "IoT-шлюз на ферме", "Node-RED, сенсоры")
+System_Ext(farm_cameras, "Видеоаналитика", "Камеры с ML-обработкой")
+System_Ext(farm_equipment, "Датчики техники", "GPS, телеметрия техники")
+
+System_Ext(payment_ru, "Платёжные системы РФ", "ЮKassa, Сбер")
+System_Ext(sms_provider, "SMS-провайдер", "Уведомления")
+System_Ext(email_service, "Email-сервис", "Transactional emails")
+
+Person_Ext(client_developer, "Разработчик клиента", "Интегрирует через API")
+
+System_Ext(dev_portal, "Developer Portal", "Документация API, SDK")
+
+Rel(small_client, core_platform, "Web UI + API", "HTTPS")
+Rel(medium_client, core_platform, "Web UI + API", "HTTPS")
+Rel(enterprise_client, core_platform, "Web UI + API + On-premise", "HTTPS/VPN")
+
+Rel(director, core_platform, "Портал мониторинга")
+Rel(analyst, core_platform, "Аналитика и отчёты")
+Rel(mechanic, core_platform, "Уведомления о технике")
+
+Rel(farm_iot, core_platform, "Телеметрия сенсоров", "MQTT/HTTPS")
+Rel(farm_cameras, core_platform, "События видеоаналитики", "HTTPS")
+Rel(farm_equipment, core_platform, "GPS и метрики техники", "HTTPS")
+
+Rel(core_platform, client_erp, "Выгрузка данных о поголовье", "REST API")
+Rel(client_analytics, core_platform, "Загрузка метрик для анализа", "REST API")
+
+Rel(core_platform, payment_ru, "Биллинг подписок", "API")
+Rel(core_platform, sms_provider, "Отправка SMS-уведомлений", "API")
+Rel(core_platform, email_service, "Email-уведомления", "SMTP")
+
+Rel(saas_admin, core_platform, "Управление клиентами, тарифами", "Admin UI")
+Rel(support, core_platform, "Поддержка клиентов", "Support UI")
+
+Rel(client_developer, dev_portal, "Изучает API", "HTTPS")
+Rel(client_developer, core_platform, "API интеграция", "REST/GraphQL API")
+Rel(dev_portal, core_platform, "Документация генерируется из", "OpenAPI spec")
+
+@enduml

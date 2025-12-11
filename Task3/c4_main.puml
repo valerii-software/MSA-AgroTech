@@ -1,0 +1,22 @@
+@startuml Code
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+System_Boundary(ingest, "Data Ingest Service") {
+
+    Component(http_srv, "HTTPServer", "FastAPI", "Обработка HTTP POST/PUT событий")
+    Component(mqtt_client, "MQTTClient", "Go MQTT", "Подключение к локальному мосту")
+
+    Component(router, "EventRouter", "Go", "Определяет тип события, нормализует структуру")
+    Component(validator, "SchemaValidator", "Python Pydantic", "Валидация сообщений")
+
+    Component(publisher, "QueuePublisher", "amqp/mqtt", "Публикация сообщений в брокер")
+    Component(logger, "StructuredLogger", "Python", "Логирование, трассировка")
+
+    Rel(http_srv, router, "Передаёт payload")
+    Rel(mqtt_client, router, "Передаёт MQTT events")
+    Rel(router, validator, "Validate()")
+    Rel(router, publisher, "Publish(topic, message)")
+    Rel(router, logger, "Logs")
+}
+
+@enduml

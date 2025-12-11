@@ -1,0 +1,74 @@
+@startuml Schema-per-tenant
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Вариант A: Изоляция на уровне схем БД (Schema-per-tenant)
+
+Person(client_a, "Клиент A (Агрохолдинг 1)", "Директор, механики, аналитики")
+Person(client_b, "Клиент B (Агрохолдинг 2)", "Директор, механики, аналитики")
+Person(client_c, "Клиент C (Агрохолдинг 3)", "Директор, механики, аналитики")
+
+System_Boundary(saas, "SaaS Платформа") {
+
+    Container_Boundary(gateway, "API Gateway & Auth") {
+        Component(api_gw, "API Gateway", "Kong/Traefik", "Маршрутизация запросов")
+        Component(tenant_router, "Tenant Router", "Go", "Определение tenant_id из токена/домена")
+        Component(auth, "Auth Service", "OAuth2/JWT", "Аутентификация с tenant context")
+    }
+
+    Container_Boundary(services, "Application Services") {
+        Component(ingest_svc, "Ingest Service", "Go/Python", "Приём телеметрии с tenant_id")
+        Component(processor_svc, "Processor Service", "Python", "Обработка событий per tenant")
+        Component(analytics_svc, "Analytics Service", "Python", "Аналитика и отчёты")
+        Component(notification_svc, "Notification Service", "Node.js", "Уведомления")
+    }
+
+    Container_Boundary(data_layer, "Data Layer - Single Database") {
+        ContainerDb(shared_db, "PostgreSQL/TimescaleDB", "Shared DB", "Единая БД с множеством схем")
+
+        Component(schema_a, "Schema: tenant_a", "PostgreSQL Schema", "События, метрики, пользователи клиента A")
+        Component(schema_b, "Schema: tenant_b", "PostgreSQL Schema", "События, метрики, пользователи клиента B")
+        Component(schema_c, "Schema: tenant_c", "PostgreSQL Schema", "События, метрики, пользователи клиента C")
+        Component(rls, "Row-Level Security", "PostgreSQL Policy", "Дополнительная защита от утечек")
+    }
+
+    Container_Boundary(pool, "Connection Management") {
+        Component(conn_pool, "Connection Pool", "PgBouncer", "Единый пул с переключением search_path")
+    }
+
+    ContainerDb(cache, "Redis", "Cache", "Кэш tenant mappings и сессий")
+    ContainerDb(s3, "S3 Storage", "Object Storage", "Видео разделено по префиксам tenant_id")
+
+    Container(monitoring, "Monitoring", "Prometheus+Grafana", "Метрики для каждого tenant")
+}
+
+Rel(client_a, api_gw, "HTTPS", "API вызов с tenant=A в токене")
+Rel(client_b, api_gw, "HTTPS", "API вызов с tenant=B в токене")
+Rel(client_c, api_gw, "HTTPS", "API вызов с tenant=C в токене")
+
+Rel(api_gw, tenant_router, "Извлекает tenant_id")
+Rel(tenant_router, auth, "Валидация токена + tenant context")
+Rel(tenant_router, cache, "Кэширование tenant info")
+
+Rel(api_gw, ingest_svc, "Передача с tenant_id в header")
+Rel(api_gw, analytics_svc, "Передача с tenant_id")
+
+Rel(ingest_svc, conn_pool, "SET search_path = tenant_a", "")
+Rel(processor_svc, conn_pool, "SET search_path = tenant_b", "")
+Rel(analytics_svc, conn_pool, "SET search_path = tenant_c", "")
+
+Rel(conn_pool, shared_db, "Переключение схем")
+
+Rel_Down(shared_db, schema_a, "Содержит")
+Rel_Down(shared_db, schema_b, "Содержит")
+Rel_Down(shared_db, schema_c, "Содержит")
+Rel(shared_db, rls, "Применяет политики")
+
+Rel(processor_svc, notification_svc, "Триггер уведомлений")
+Rel(ingest_svc, s3, "Запись видео /tenant_a/...")
+Rel(processor_svc, s3, "Запись видео /tenant_b/...")
+
+Rel(services, monitoring, "Метрики с tenant_id")
+
+@enduml

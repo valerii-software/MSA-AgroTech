@@ -1,0 +1,39 @@
+@startuml C3_Alt
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+System_Boundary(alt, "АгроПром Х - Цифровая платформа (альтернатива)") {
+
+    Container(iot_gateway, "IoT Gateway", "Node-RED", "Локальная агрегация, MQTT, фильтрация шумов")
+
+    Container(api_gw, "API Gateway", "Kong/Envoy", "Ingress, routing, auth")
+    Container(auth, "Auth Service", "Keycloak", "SSO, RBAC")
+
+    Container(kafka, "Kafka Cluster", "Apache Kafka", "Высоконагруженный стриминг телеметрии")
+
+    Container_Boundary(stream_block, "Stream Processing Layer") {
+        Component(stream_proc, "Real-Time Processing", "Flink / Kafka Streams", "ML и правила")
+        Component(stream_join, "Stream Joiner", "Flink SQL", "Соединение разных потоков")
+        Component(stream_agg, "Stream Aggregator", "Flink", "Агрегация временных рядов")
+    }
+
+    Container(ts_db, "Timeseries Storage", "ClickHouse / TimescaleDB", "Хранение событий и метрик")
+    Container(obj, "Object Storage", "S3", "Видео, файлы, результаты ML")
+
+    Container(notification, "Notification Service", "Serverless", "Webhook/SMS/Push")
+
+    Container(bi, "BI Analytics", "Metabase/Power BI", "Сложная аналитика, отчёты")
+    Container(monitor, "Monitoring", "Prometheus+Grafana+Jaeger", "Метрики, трейсинг")
+}
+
+Rel(iot_gateway, kafka, "MQTT - Kafka мост")
+Rel(api_gw, kafka, "API - Kafka события")
+Rel(kafka, stream_proc, "Стриминг телеметрии")
+Rel(stream_proc, stream_join, "Подключается к стримам")
+Rel(stream_join, stream_agg, "Аггрегирует")
+Rel(stream_agg, ts_db, "Запись метрик")
+Rel(stream_proc, obj, "Видео")
+Rel(stream_proc, notification, "Оповещения")
+Rel(ts_db, bi, "Источник аналитики")
+Rel(monitor, stream_block, "Монитоирнг")
+@enduml
