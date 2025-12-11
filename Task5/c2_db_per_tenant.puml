@@ -1,0 +1,82 @@
+@startuml Database-per-tenant
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+
+title Вариант B: Изоляция на уровне отдельных БД (Database-per-tenant) - основной
+
+Person(client_a, "Клиент A", "Агрохолдинг 1 (10 ферм)")
+Person(client_b, "Клиент B", "Агрохолдинг 2 (7 ферм)")
+Person(client_c, "Клиент C", "Агрохолдинг 3 (15 ферм)")
+Person_Ext(admin, "SaaS Администратор", "Управление платформой")
+
+System_Boundary(saas, "SaaS Платформа АгроПром Х") {
+
+    Container(api_gateway, "API Gateway", "Routing, rate limiting, tenant extraction")
+    Container(auth, "Auth Service", "Мультитенантная аутентификация")
+
+    Container_Boundary(tenant_mgmt, "Tenant Management") {
+        Container(tenant_registry, "Tenant Registry", "PostgreSQL + Redis", "Маппинг tenant_id:DB_connection_string")
+        Container(provisioner, "DB Provisioner", "Terraform + Python", "Автоматическое создание БД для новых клиентов")
+    }
+
+    Container_Boundary(core_services, "Core Services") {
+        Container(ingest, "Ingest Service", "Go/Python", "Приём телеметрии (tenant-aware)")
+        Container(processor, "Processor Service", "Python + ML", "Real-time обработка событий")
+        Container(analytics, "Analytics Service", "Python", "Отчёты и дашборды")
+        Container(notification, "Notification Service", "Node.js", "Push, SMS, Email")
+    }
+
+    Container(message_queue, "Message Queue", "RabbitMQ", "Event bus")
+
+    Container_Boundary(db_cluster, "Database Cluster (PostgreSQL/TimescaleDB)") {
+        ContainerDb(db_tenant_a, "DB: tenant_a", "PostgreSQL", "Выделенная БД для клиента A")
+        ContainerDb(db_tenant_b, "DB: tenant_b", "PostgreSQL", "Выделенная БД для клиента B")
+        ContainerDb(db_tenant_c, "DB: tenant_c", "PostgreSQL", "Выделенная БД для клиента C")
+    }
+
+    Container_Boundary(conn_mgmt, "Connection Management") {
+        Container(pool_a, "Connection Pool A", "PgBouncer", "Пул для tenant_a с лимитами")
+        Container(pool_b, "Connection Pool B", "PgBouncer", "Пул для tenant_b с лимитами")
+        Container(pool_c, "Connection Pool C", "PgBouncer", "Пул для tenant_c с лимитами")
+    }
+
+    ContainerDb(s3, "S3 Storage", "Object Storage", "Видео: отдельные buckets для каждого tenant")
+
+    Container(backup_orch, "Backup Orchestrator", "Ansible + Cron", "Координация бэкапов множества БД")
+    Container(monitoring, "Monitoring", "Prometheus + Grafana", "Метрики per tenant + federation")
+}
+
+Rel(client_a, api_gateway, "HTTPS", "tenant=A в токене/домене")
+Rel(client_b, api_gateway, "HTTPS", "tenant=B в токене/домене")
+Rel(client_c, api_gateway, "HTTPS", "tenant=C в токене/домене")
+Rel(admin, provisioner, "HTTPS", "Создание новых tenant")
+
+Rel(api_gateway, auth, "Валидация токена")
+Rel(api_gateway, tenant_registry, "tenant_id -> DB info")
+
+Rel(api_gateway, ingest, "Роутинг с tenant")
+Rel(api_gateway, analytics, "Роутинг с tenant")
+
+Rel(ingest, message_queue, "Публикация (tenant_id routing key)")
+Rel(message_queue, processor, "Консьюминг events per tenant")
+
+Rel(ingest, pool_a, "Запись (только для tenant_a)")
+Rel(processor, pool_b, "Чтение, запись (только для tenant_b)")
+Rel(analytics, pool_c, "Чтение (только для tenant_c)")
+
+Rel(pool_a, db_tenant_a, "Изолированное подключение")
+Rel(pool_b, db_tenant_b, "Изолированное подключение")
+Rel(pool_c, db_tenant_c, "Изолированное подключение")
+
+Rel(processor, notification, "Trigger уведомлений")
+Rel(ingest, s3, "Запись видео в bucket tenant_a")
+Rel(processor, s3, "Запись видео в bucket tenant_b")
+
+Rel(provisioner, tenant_registry, "Регистрация нового tenant")
+Rel(provisioner, db_cluster, "CREATE DATABASE tenant_x + миграции")
+
+Rel(backup_orch, db_cluster, "Бэкапы всех БД по расписанию")
+Rel(monitoring, core_services, "Сбор метрик")
+Rel(monitoring, db_cluster, "Мониторинг БД")
+
+@enduml

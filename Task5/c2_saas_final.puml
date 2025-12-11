@@ -1,0 +1,132 @@
+@startuml SaaS-Final-C2
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Финальная архитектура SaaS-платформы АгроПром Х (C2 - Containers)
+
+Person(client_user, "Пользователь клиента", "Директор, аналитик, механик")
+Person(client_dev, "Разработчик клиента", "Интегрирует системы через API")
+Person_Ext(saas_admin, "SaaS Администратор", "Управляет платформой")
+
+System_Ext(farm_iot, "IoT-шлюз фермы", "Сенсоры, камеры")
+System_Ext(client_system, "Система клиента", "ERP, BI, ветеринарная")
+System_Ext(payment_ru, "Платёжная система", "ЮKassa, CloudPayments")
+System_Ext(notification_ext, "Внешние уведомления", "SMS, Email")
+
+System_Boundary(saas, "SaaS-платформа АгроПром Х") {
+
+    Container_Boundary(frontend, "Frontend Layer") {
+        Container(web_portal, "Web Portal", "React + TypeScript", "UI для пользователей клиентов")
+        Container(admin_ui, "Admin UI", "React + TypeScript", "Управление платформой")
+        Container(dev_portal, "Developer Portal", "Docusaurus", "API документация, примеры, песочница")
+    }
+
+    Container_Boundary(api_layer, "API Gateway Layer") {
+        Container(api_gateway, "API Gateway", "Kong/Traefik", "Rate limiting, роутинг, получение tenant'ов")
+        Container(graphql_api, "GraphQL API", "Apollo Server", "Гибкий API для клиентов")
+    }
+
+    Container_Boundary(auth_layer, "Auth & Tenant Management") {
+        Container(auth_service, "Auth Service", "OAuth2/OIDC + Keycloak", "Мультитенантная аутентификация, SSO")
+        Container(tenant_registry, "Tenant Registry", "PostgreSQL + Redis", "Маппинг tenant:DB/Instance")
+        Container(tenant_provisioner, "Tenant Provisioner", "Terraform + Python", "Автоматическое создание инфраструктуры для tenant")
+    }
+
+    Container_Boundary(core, "Core Business Services") {
+        Container(ingest, "Ingest Service", "Go", "Приём телеметрии от IoT-шлюзов")
+        Container(processor, "Processor Service", "Python + ML", "Real-time обработка, детекция инцидентов")
+        Container(analytics, "Analytics Service", "Python", "Агрегация метрик, отчёты")
+        Container(notification, "Notification Service", "Node.js", "Уведомления пользователям")
+        Container(video_indexer, "Video Indexer", "Python", "Индексация и поиск по видео")
+    }
+
+    Container_Boundary(billing, "Billing &Monetization") {
+        Container(subscription_mgmt, "Subscription Management", "Python + FastAPI", "Управление подписками, тарифы")
+        Container(usage_tracker, "Usage Tracker", "Python", "Сбор метрик использования")
+        Container(billing_engine, "Billing Engine", "Python", "Расчёт стоимости, выставление счетов")
+        Container(payment_gateway, "Payment Gateway", "Python", "Интеграция с платёжными системами РФ")
+    }
+
+    Container_Boundary(integration, "Customer Integration Layer") {
+        Container(webhook_service, "Webhook Service", "Node.js", "Отправка событий клиентам")
+        Container(export_service, "Export Service", "Python", "Экспорт данных в форматы клиентов (CSV, JSON, XML)")
+        Container(api_keys_mgmt, "API Keys Management", "Go", "Управление API ключами клиентов")
+    }
+
+    Container(message_queue, "Message Queue", "RabbitMQ/Kafka", "Event bus с tenant routing")
+
+    Container_Boundary(data, "Data Layer (Multi-tenant)") {
+        ContainerDb(tenant_dbs, "Tenant Databases", "PostgreSQL/TimescaleDB", "Отдельная БД per tenant (Database-per-tenant)")
+        ContainerDb(platform_db, "Platform DB", "PostgreSQL", "Метаданные платформы, биллинг, пользователи")
+        ContainerDb(analytics_db, "Analytics DB", "ClickHouse", "Кросс-tenant аналитика для ML")
+    }
+
+    ContainerDb(s3_storage, "Object Storage", "S3/MinIO", "Видео, файлы (per tenant bucket)")
+    ContainerDb(cache, "Cache", "Redis Cluster", "Сессии, маппинг tenant'ов, rate limits")
+
+    Container_Boundary(ops, "Monitoring & Operations") {
+        Container(monitoring, "Monitoring", "Prometheus + Grafana", "Метрики per tenant + platform")
+        Container(logging, "Centralized Logging", "ELK Stack", "Логи с tenant_id context")
+        Container(alerting, "Alerting", "AlertManager", "Алерты для ops и клиентов")
+        Container(backup_orch, "Backup Orchestrator", "Velero + Cron", "Автоматические бэкапы per tenant")
+    }
+}
+
+Rel(client_user, web_portal, "HTTPS", "Использует портал")
+Rel(client_dev, dev_portal, "HTTPS", "Изучает API")
+Rel(saas_admin, admin_ui, "HTTPS", "Управление")
+
+Rel(web_portal, api_gateway, "REST/GraphQL")
+Rel(admin_ui, api_gateway, "REST")
+Rel(client_dev, api_gateway, "REST/GraphQL API", "API ключ + tenant context")
+
+Rel(api_gateway, auth_service, "Валидация токена")
+Rel(api_gateway, tenant_registry, "Resolve tenant - DB")
+Rel(api_gateway, graphql_api, "Route GraphQL")
+
+Rel(farm_iot, api_gateway, "MQTT/HTTPS", "Телеметрия")
+Rel(api_gateway, ingest, "Передача с tenant_id")
+Rel(ingest, message_queue, "Публикация событий")
+Rel(message_queue, processor, "Консьюминг")
+Rel(processor, tenant_dbs, "Запись метрик")
+Rel(processor, s3_storage, "Хранение видео")
+Rel(processor, notification, "Триггер алертов")
+
+Rel(analytics, tenant_dbs, "Чтение данныз")
+Rel(analytics, analytics_db, "Аггрегация для ML")
+Rel(web_portal, analytics, "Запрос отчётов")
+
+Rel(usage_tracker, tenant_dbs, "Сбор метрик использования")
+Rel(usage_tracker, platform_db, "Запись пользовательских логов")
+Rel(billing_engine, platform_db, "Расчёт стоимости")
+Rel(billing_engine, payment_gateway, "Списание средств")
+Rel(payment_gateway, payment_ru, "API", "Платежи")
+Rel(subscription_mgmt, platform_db, "Управление подписками")
+
+Rel(webhook_service, client_system, "Webhook", "События")
+Rel(processor, webhook_service, "Trigger webhook")
+Rel(export_service, tenant_dbs, "Экспорт данных")
+Rel(client_system, api_gateway, "REST API", "Загрузка данных")
+
+Rel(saas_admin, tenant_provisioner, "Создание tenant")
+Rel(tenant_provisioner, tenant_registry, "Регистрация")
+Rel(tenant_provisioner, tenant_dbs, "CREATE DATABASE + миграции")
+Rel(tenant_provisioner, s3_storage, "CREATE bucket")
+
+Rel(auth_service, platform_db, "Пользователи, роли")
+Rel(auth_service, cache, "Кэширование сессий")
+Rel(tenant_registry, cache, "Кэш маппингов")
+Rel(api_gateway, cache, "Rate limiting")
+
+Rel(notification, notification_ext, "SMS/Email API")
+Rel(notification, client_user, "Push notifications")
+
+Rel(monitoring, core, "Сбор метрик")
+Rel(monitoring, billing, "Сбор метрик")
+Rel(logging, core, "Сбор логов")
+Rel(alerting, saas_admin, "Критические алерты")
+Rel(backup_orch, tenant_dbs, "Бэкапы")
+Rel(backup_orch, s3_storage, "Бэкап метадаты")
+
+@enduml

@@ -1,0 +1,93 @@
+@startuml Current-Company-Integration
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+
+title Интеграция текущей компании АгроПром Х как клиента SaaS-платформы (C2)
+
+Person(director, "Директор хозяйства", "Управляет всеми фермами компании")
+Person(analyst, "Аналитик", "Корпоративная аналитика")
+Person(mechanic, "Механик", "Обслуживает технику")
+Person(ops, "DevOps компании", "Управляет on-premise инфраструктурой")
+
+System_Boundary(company_systems, "Существующие системы АгроПром Х") {
+    Container(erp_1c, "1С:Предприятие", "ERP", "Учёт, финансы, складской учёт")
+    Container(vet_system, "Ветеринарная система", "Учёт здоровья", "Карточки животных, вакцинация")
+    Container(powerbi, "Power BI", "BI-система", "Корпоративная аналитика и отчёты")
+    Container(corp_sso, "Corporate SSO", "Active Directory", "Корпоративная аутентификация")
+}
+
+System_Boundary(farms, "Фермы АгроПром Х") {
+
+    System_Boundary(farm_1, "Ферма 1") {
+        Container(iot_farm1, "IoT Gateway 1", "Node-RED", "Сенсоры, камеры фермы 1")
+    }
+
+    System_Boundary(farm_2, "Ферма 2") {
+        Container(iot_farm2, "IoT Gateway 2", "Node-RED", "Сенсоры, камеры фермы 2")
+    }
+
+    System_Boundary(farm_3, "Ферма 3") {
+        Container(iot_farm3, "IoT Gateway 3", "Node-RED", "Сенсоры, камеры фермы 3")
+    }
+}
+
+System_Boundary(saas, "SaaS-платформа АгроПром Х") {
+
+    Container(api_gateway, "API Gateway", "Kong", "Роутинг с tenant_id=agrox_internal")
+    Container(auth, "Auth Service", "OAuth2/OIDC", "Федерация с Corp SSO")
+
+    Container_Boundary(tenant_instance, "Инстанс tenant'а: agrox_internal (Database-per-tenant)") {
+        Container(ingest, "Ingest Service", "Go", "Приём от 3 ферм")
+        Container(processor, "Processor Service", "Python + ML", "Real-time обработка")
+        Container(analytics_svc, "Analytics Service", "Python", "Агрегация метрик")
+        Container(notification, "Notification Service", "Node.js", "Уведомления")
+        Container(webhook, "Webhook Service", "Node.js", "События для ERP/Vet")
+        Container(export, "Export Service", "Python", "Экспорт для Power BI")
+
+        ContainerDb(tenant_db, "Database: agrox_internal", "TimescaleDB", "Выделенная БД для компании")
+        ContainerDb(s3_tenant, "S3: agrox-internal-video", "S3", "Видео от 3 ферм")
+    }
+
+    Container(message_queue, "RabbitMQ", "Message Queue", "Event bus")
+
+    Container(web_portal, "Web Portal", "React", "UI для пользователей")
+    Container(mobile_app, "Mobile App", "React Native", "Мобильные уведомления")
+}
+
+Rel(director, web_portal, "HTTPS", "Мониторинг всех ферм")
+Rel(analyst, web_portal, "HTTPS", "Просмотр аналитики")
+Rel(mechanic, mobile_app, "HTTPS", "Получает уведомления")
+
+Rel(web_portal, api_gateway, "REST API", "tenant=agrox_internal")
+Rel(mobile_app, api_gateway, "REST API", "tenant=agrox_internal")
+
+Rel(api_gateway, auth, "Validate token")
+Rel(auth, corp_sso, "SAML/OIDC Federation", "Используется корпоративный SSO")
+Rel(director, corp_sso, "Логин через AD")
+
+Rel(iot_farm1, api_gateway, "MQTT/HTTPS", "Телеметрия фермы 1")
+Rel(iot_farm2, api_gateway, "MQTT/HTTPS", "Телеметрия фермы 2")
+Rel(iot_farm3, api_gateway, "MQTT/HTTPS", "Телеметрия фермы 3")
+
+Rel(api_gateway, ingest, "Форвардинг событий")
+Rel(ingest, message_queue, "Публикация")
+Rel(message_queue, processor, "Консьюминг")
+Rel(processor, tenant_db, "Запись событий")
+Rel(processor, s3_tenant, "Хранение видео")
+Rel(processor, notification, "Триггер алертов")
+Rel(notification, mechanic, "Отправка уведомлений", "Критические события")
+
+Rel(processor, webhook, "Событие зафиксировано")
+Rel(webhook, vet_system, "Webhook", "Уведомление о заболевании животного")
+Rel(webhook, erp_1c, "REST API", "Обновление данных о поголовье")
+
+Rel(export, tenant_db, "Чтение данных")
+Rel(powerbi, export, "REST API", "Загрузка метрик для отчётов")
+Rel(powerbi, api_gateway, "Direct API", "Real-time данные")
+
+Rel(analytics_svc, tenant_db, "Query метрик")
+Rel(web_portal, analytics_svc, "Запрос отчётов")
+
+Rel(ops, api_gateway, "Monitoring API", "Метрики использования")
+
+@enduml
