@@ -1,0 +1,36 @@
+@startuml Container
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+Person(director, "Директор хозяйства", "Использует веб-портал для мониторинга и отчетности")
+Person(mechanic, "Механик", "Использует мобильное приложение/веб-портал для уведомлений по технике")
+Person(analyst, "Аналитик", "Проводит анализ, готовит отчеты")
+Person(operator, "Дежурный сотрудник платформы", "Следит за состоянием платформы и инцидентами")
+
+System_Boundary(platform, "АгроПром Х - Контейнеры (MVP)") {
+  Container(web_app, "Web Portal / API Gateway", "Node.js / FastAPI", "HTTP API и UI (React)")
+  Container(auth, "Auth Service", "OAuth2 / JWT", "Аутентификация и авторизация пользователей")
+  Container(ingest, "Data Ingest Service", "Go / Python", "Приём телеметрии и событий от шлюзов и видеоаналитики")
+  Container(processor, "Real-Time Processor", "Python", "Обработка потоковых событий, детекция инцедентов")
+  Container(queue, "Message Queue", "RabbitMQ (MQTT gateway)", "Короткие задержки, MQTT интеграция для устройств")
+  Container(storage, "Timeseries DB / Long-Term Storage", "TimescaleDB / S3", "Метрики, логи, видео индекс")
+  Container(notification, "Notification Service", "Serverless / Node", "Push, SMS, Email, Webhook")
+  Container(ui_analytics, "Analytics UI", "React", "Дашборды для аналитика (поддержка экспортов)")
+  Container(monitoring, "Monitoring & Ops", "Prometheus + Grafana", "Метрики платформы, алерты")
+}
+
+Rel(director, web_app, "Пользуется UI / API")
+Rel(mechanic, web_app, "Получает уведомления, смотрит статус оборудования")
+Rel(analyst, ui_analytics, "Аналитика и отчёты")
+Rel(operator, monitoring, "Оперативный обзор")
+
+Rel(web_app, auth, "Auth requests (OAuth2)")
+Rel(web_app, ingest, "REST / WebSocket (администраторские запросы)")
+Rel(ingest, queue, "Публикация событий / mqtt bridge")
+Rel(queue, processor, "Подписка на события")
+Rel(processor, storage, "Запись метрик и событий")
+Rel(processor, notification, "Триггер оповещений")
+Rel(notification, mechanic, "Push/SMS/Email")
+Rel(notification, director, "Email/Push")
+Rel(storage, ui_analytics, "Чтение данных для отчетов")
+
+@enduml
