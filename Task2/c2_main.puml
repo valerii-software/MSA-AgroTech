@@ -6,7 +6,19 @@ Person(mechanic, "Механик", "Использует мобильное пр
 Person(analyst, "Аналитик", "Проводит анализ, готовит отчеты")
 Person(operator, "Дежурный сотрудник платформы", "Следит за состоянием платформы и инцидентами")
 
-System_Boundary(platform, "АгроПром Х - Контейнеры (MVP)") {
+System_Boundary(farm1, "Свиноферма №1") {
+  System_Ext(cameras1, "IP-камеры", "RTSP видеопоток")
+  System_Ext(sensors1, "IoT датчики", "MQTT телеметрия")
+  Container(edge1, "Edge Gateway", "Python/Node-RED", "Локальная обработка и буферизация")
+}
+
+System_Boundary(farm2, "Свиноферма №2") {
+  System_Ext(cameras2, "IP-камеры", "RTSP видеопоток")
+  System_Ext(sensors2, "IoT датчики", "MQTT телеметрия")
+  Container(edge2, "Edge Gateway", "Python/Node-RED", "Локальная обработка и буферизация")
+}
+
+System_Boundary(platform, "Облако (YandexCloud) - АгроПром Х") {
   Container(web_app, "Web Portal / API Gateway", "Node.js / FastAPI", "HTTP API и UI (React)")
   Container(auth, "Auth Service", "OAuth2 / JWT", "Аутентификация и авторизация пользователей")
   Container(ingest, "Data Ingest Service", "Go / Python", "Приём телеметрии и событий от шлюзов и видеоаналитики")
@@ -18,19 +30,36 @@ System_Boundary(platform, "АгроПром Х - Контейнеры (MVP)") {
   Container(monitoring, "Monitoring & Ops", "Prometheus + Grafana", "Метрики платформы, алерты")
 }
 
-Rel(director, web_app, "Пользуется UI / API")
-Rel(mechanic, web_app, "Получает уведомления, смотрит статус оборудования")
-Rel(analyst, ui_analytics, "Аналитика и отчёты")
-Rel(operator, monitoring, "Оперативный обзор")
+System_Ext(video_analytics, "Видеоаналитика ML", "Детекция инцидентов")
 
+' === Взаимосвязи на фермах ===
+Rel(cameras1, edge1, "RTSP поток")
+Rel(sensors1, edge1, "MQTT данные")
+Rel(edge1, ingest, "События/метрики", "HTTPS/MQTT через Интернет")
+
+Rel(cameras2, edge2, "RTSP поток")
+Rel(sensors2, edge2, "MQTT данные")
+Rel(edge2, ingest, "События/метрики", "HTTPS/MQTT через Интернет")
+
+' === Взаимосвязи пользователей ===
+Rel(director, web_app, "Пользуется UI / API", "HTTPS")
+Rel(mechanic, web_app, "Получает уведомления, смотрит статус оборудования", "HTTPS")
+Rel(analyst, ui_analytics, "Аналитика и отчёты", "HTTPS")
+Rel(operator, monitoring, "Оперативный обзор", "HTTPS")
+
+' === Взаимосвязи внутри платформы ===
 Rel(web_app, auth, "Auth requests (OAuth2)")
 Rel(web_app, ingest, "REST / WebSocket (администраторские запросы)")
 Rel(ingest, queue, "Публикация событий / mqtt bridge")
 Rel(queue, processor, "Подписка на события")
+Rel(processor, video_analytics, "Запросы на анализ видео", "API")
+Rel(video_analytics, processor, "Результаты анализа")
 Rel(processor, storage, "Запись метрик и событий")
 Rel(processor, notification, "Триггер оповещений")
 Rel(notification, mechanic, "Push/SMS/Email")
 Rel(notification, director, "Email/Push")
 Rel(storage, ui_analytics, "Чтение данных для отчетов")
+Rel(monitoring, processor, "Метрики")
+Rel(monitoring, ingest, "Метрики")
 
 @enduml
