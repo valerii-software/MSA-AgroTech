@@ -8,17 +8,44 @@ Person(mechanic, "Механик", "Мониторинг техники")
 Person(analyst, "Аналитик", "Работа с BI-системой")
 
 
-System_Boundary(context, "Контур платформы") {
-    Person(employee, "Дежурный сотрудник платформы", "Управление платформой")
-    System(platform, "Платформа для мониторинга скота")
+System_Boundary(farm1, "Свиноферма №1") {
+    System_Ext(cameras, "IP-камеры", "Видеонаблюдение за поголовьем")
+    System_Ext(sensors, "IoT датчики", "Температура, влажность, CO2")
+    System_Ext(edge_device, "Edge устройство", "Локальная обработка видео/данных")
 }
 
-' === Взаимосвязи ===
-Rel(employee, platform, "Реагирует на неисправности платформы")
-Rel(platform, employee, "Отправляет уведомления")
+System_Boundary(farm2, "Свиноферма №2") {
+    System_Ext(cameras2, "IP-камеры", "Видеонаблюдение")
+    System_Ext(sensors2, "IoT датчики", "Телеметрия")
+    System_Ext(edge_device2, "Edge устройство", "Локальная обработка")
+}
 
-Rel(director, platform, "Имеет доступ")
-Rel(mechanic, platform, "Реагирует на неисправности техники")
-Rel(analyst, platform, "Собирает и анализирует метрики")
+System_Boundary(cloud, "Облачная инфраструктура (YandexCloud)") {
+    Person(employee, "Дежурный сотрудник платформы", "Управление платформой")
+    System(platform, "Платформа для мониторинга скота", "Центральная система обработки данных")
+}
+
+System_Ext(video_analytics, "Сервис видеоаналитики", "ML-модели детекции инцидентов")
+
+' === Взаимосвязи с устройствами ===
+Rel(cameras, edge_device, "Видеопоток RTSP")
+Rel(sensors, edge_device, "Данные MQTT/HTTP")
+Rel(edge_device, platform, "События и метрики (HTTPS/MQTT)", "Интернет")
+
+Rel(cameras2, edge_device2, "Видеопоток RTSP")
+Rel(sensors2, edge_device2, "Данные MQTT/HTTP")
+Rel(edge_device2, platform, "События и метрики (HTTPS/MQTT)", "Интернет")
+
+' === Взаимосвязи с платформой ===
+Rel(platform, video_analytics, "Запросы на анализ видео (API)")
+Rel(video_analytics, platform, "Результаты анализа")
+
+Rel(employee, platform, "Управление и мониторинг", "HTTPS")
+Rel(platform, employee, "Уведомления об инцидентах", "Push/Email")
+
+Rel(director, platform, "Просмотр дашбордов", "HTTPS")
+Rel(mechanic, platform, "Мониторинг техники", "HTTPS/Mobile")
+Rel(analyst, platform, "Анализ данных и отчёты", "HTTPS")
+Rel(platform, mechanic, "Уведомления о неисправностях", "Push/SMS")
 
 @enduml
