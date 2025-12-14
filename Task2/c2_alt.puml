@@ -1,0 +1,67 @@
+@startuml Container
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+
+Person(director, "Директор хозяйства", "Использует BI для отчётов")
+Person(mechanic, "Механик", "Мониторинг техники")
+Person(analyst, "Аналитик", "Глубокий анализ данных")
+Person(operator, "Дежурный сотрудник платформы", "Мониторинг платформы")
+
+
+System_Boundary(farm1, "Свиноферма №1") {
+  System_Ext(cameras1, "IP-камеры", "RTSP видеопоток")
+  System_Ext(sensors1, "IoT датчики", "MQTT телеметрия")
+  Container(edge1, "IoT Gateway", "Node-RED/Mosquitto", "Локальная обработка и буферизация")
+}
+
+System_Boundary(farm2, "Свиноферма №2") {
+  System_Ext(cameras2, "IP-камеры", "RTSP видеопоток")
+  System_Ext(sensors2, "IoT датчики", "MQTT телеметрия")
+  Container(edge2, "IoT Gateway", "Node-RED/Mosquitto", "Локальная обработка и буферизация")
+}
+
+System_Boundary(platform, "Облако (YandexCloud) - АгроПром Х") {
+  Container(api_gw, "API Gateway", "NGINX / Envoy", "Ingress + auth")
+  Container(auth, "Auth Service", "Keycloak / OpenID Connect", "SSO и RBAC")
+  Container(kafka, "Event Streaming", "Apache Kafka", "Центральная шина событий, высокая пропускная способность")
+  Container(stream_proc, "Stream Processing", "Kafka Streams / Flink", "Real-time аналитика и ML-инференс")
+  Container(storage_ts, "TimeSeries DB", "ClickHouse / TimescaleDB", "Хранение метрик")
+  Container(object_store, "Object Storage", "S3/GCS", "Видео и большие артефакты")
+  Container(notification, "Notification Service", "Kubernetes + Serverless", "Оповещения")
+  Container(bi, "BI / Reporting", "Power BI / Metabase", "Сложная аналитика и истории")
+  Container(monitoring, "Monitoring & Observability", "Prometheus + Grafana + Jaeger", "SLO/ALERTS")
+}
+
+System_Ext(video_analytics, "Видеоаналитика ML", "Детекция инцидентов")
+
+' === Взаимосвязи на фермах ===
+Rel(cameras1, edge1, "RTSP поток")
+Rel(sensors1, edge1, "MQTT данные")
+Rel(edge1, kafka, "События/метрики", "MQTT/HTTPS через Интернет")
+
+Rel(cameras2, edge2, "RTSP поток")
+Rel(sensors2, edge2, "MQTT данные")
+Rel(edge2, kafka, "События/метрики", "MQTT/HTTPS через Интернет")
+
+' === Взаимосвязи пользователей ===
+Rel(director, bi, "Доступ к отчётам", "HTTPS")
+Rel(analyst, bi, "Глубокий анализ", "HTTPS")
+Rel(mechanic, api_gw, "Просмотр статуса", "HTTPS")
+Rel(operator, monitoring, "Оперативный мониторинг", "HTTPS")
+
+' === Взаимосвязи внутри платформы ===
+Rel(api_gw, auth, "Аутентификация", "OAuth2")
+Rel(api_gw, kafka, "Публикация событий / API -> Kafka")
+Rel(kafka, stream_proc, "Event streams для обработки")
+Rel(stream_proc, video_analytics, "Запросы на анализ видео", "API")
+Rel(video_analytics, stream_proc, "Результаты анализа")
+Rel(stream_proc, storage_ts, "Агрегация метрик")
+Rel(stream_proc, object_store, "Секция видео / записи")
+Rel(stream_proc, notification, "Триггер оповещений")
+Rel(notification, mechanic, "Push/SMS/Email")
+Rel(notification, director, "Email/Push")
+Rel(storage_ts, bi, "Источник данных для BI")
+Rel(monitoring, kafka, "Метрики")
+Rel(monitoring, stream_proc, "Метрики")
+
+@enduml

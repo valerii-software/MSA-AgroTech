@@ -1,0 +1,71 @@
+@startuml Instance-per-tenant
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Вариант C: Изоляция на уровне инстансов (Instance-per-tenant) - для Enterprise
+
+Person(enterprise_a, "Enterprise Client A", "Крупный агрохолдинг (50+ ферм)")
+Person(enterprise_b, "Enterprise Client B", "Крупный агрохолдинг (30+ ферм)")
+Person_Ext(saas_ops, "SaaS Ops Team", "Управление инфраструктурой")
+
+System_Boundary(control_plane, "Control Plane (Централизованный)") {
+    Container(tenant_orch, "Tenant Orchestrator", "Python + Terraform", "Управление жизненным циклом инстансов")
+    Container(billing_collector, "Billing Collector", "Python", "Сбор метрик использования от всех инстансов")
+    Container(analytics_agg, "Analytics Aggregator", "ClickHouse", "Кросс-tenant аналитика и ML")
+    Container(multi_cluster_mgmt, "Multi-Cluster Management", "Rancher/Lens", "Централизованное управление k8s кластерами")
+}
+
+System_Boundary(instance_a, "Выделенный инстанс A (k8s Namespace/Cluster)") {
+    Container(api_a, "API Gateway A", "Kong", "Для клиента A")
+    Container(auth_a, "Auth Service A", "OAuth2", "Аутентификация A")
+    Container(ingest_a, "Ingest A", "Go", "Телеметрия A")
+    Container(processor_a, "Processor A", "Python", "Обработка A")
+    Container(queue_a, "RabbitMQ A", "Message Queue", "Очередь A")
+    ContainerDb(db_a, "PostgreSQL A", "TimescaleDB", "Dedicated DB A")
+    ContainerDb(s3_a, "S3 Bucket A", "Object Storage", "Видео A")
+    Container(monitor_a, "Prometheus A", "Monitoring", "Метрики A")
+}
+
+System_Boundary(instance_b, "Выделенный инстанс B (k8s Namespace/Cluster)") {
+    Container(api_b, "API Gateway B", "Kong", "Для клиента B")
+    Container(auth_b, "Auth Service B", "OAuth2", "Аутентификация B")
+    Container(ingest_b, "Ingest B", "Go", "Телеметрия B")
+    Container(processor_b, "Processor B", "Python", "Обработка B")
+    Container(queue_b, "RabbitMQ B", "Message Queue", "Очередь B")
+    ContainerDb(db_b, "PostgreSQL B", "TimescaleDB", "Dedicated DB B")
+    ContainerDb(s3_b, "S3 Bucket B", "Object Storage", "Видео B")
+    Container(monitor_b, "Prometheus B", "Monitoring", "Метрики B")
+}
+
+Rel(enterprise_a, api_a, "HTTPS", "Эксклюзивный доступ")
+Rel(enterprise_b, api_b, "HTTPS", "Эксклюзивный доступ")
+
+Rel(api_a, auth_a, "Авторизация")
+Rel(api_a, ingest_a, "Роутинг")
+Rel(ingest_a, queue_a, "Публикация")
+Rel(queue_a, processor_a, "Консьюминг")
+Rel(processor_a, db_a, "Запись")
+Rel(ingest_a, s3_a, "Хранение видео")
+
+Rel(api_b, auth_b, "Авторизация")
+Rel(api_b, ingest_b, "Роутинг")
+Rel(ingest_b, queue_b, "Публикация")
+Rel(queue_b, processor_b, "Консьюминг")
+Rel(processor_b, db_b, "Запись")
+Rel(ingest_b, s3_b, "Хранение видео")
+
+Rel(saas_ops, tenant_orch, "Provision/Scale/Destroy инстансов")
+Rel(tenant_orch, instance_a, "IaC (Terraform)", "Управление инфраструктурой A")
+Rel(tenant_orch, instance_b, "IaC (Terraform)", "Управление инфраструктурой B")
+
+Rel(monitor_a, billing_collector, "Метрики использования A")
+Rel(monitor_b, billing_collector, "Метрики использования B")
+
+Rel(processor_a, analytics_agg, "Анонимизированные данные для ML")
+Rel(processor_b, analytics_agg, "Анонимизированные данные для ML")
+
+Rel(multi_cluster_mgmt, instance_a, "Мониторинг, деплой, обновления")
+Rel(multi_cluster_mgmt, instance_b, "Мониторинг, деплой, обновления")
+
+@enduml
