@@ -1,19 +1,118 @@
-@startuml Code
-!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+@startuml Code_UML_Alt
+' IoT Gateway (Альтернатива)
 
+package "IoT Gateway" {
 
-System_Boundary(iot, "IoT Gateway") {
+    class MqttBroker {
+        - host: str
+        - port: int
+        - clients: List[MqttClient]
+        - subscriptions: Map[str, List[Subscriber]]
+        + start()
+        + stop()
+        + subscribe(topic: str, subscriber: Subscriber)
+        + publish(topic: str, message: bytes)
+        + onClientConnect(client: MqttClient)
+        + onClientDisconnect(client: MqttClient)
+        - handleMessage(topic: str, message: bytes)
+    }
 
-    Component(mqtt_broker, "MqttBroker", "MQTT", "Приём телеметрии от устройств")
-    Component(flow, "NodeRED Flows", "Node-RED", "Фильтры/нормализация сигналов")
-    Component(transform, "TransformNode", "JS/Python", "Конвертация протоколов")
-    Component(retry_buf, "LocalBuffer", "SQLite/FS", "Хранение при пропадании интернета")
-    Component(kafka_writer, "KafkaWriter", "Kafka Producer", "MQTT - Kafka мост")
+    class NodeREDFlow {
+        - flowId: str
+        - nodes: List[FlowNode]
+        - connections: List[Connection]
+        + execute(message: Message): Message
+        + addNode(node: FlowNode)
+        + removeNode(nodeId: str)
+        + start()
+        + stop()
+        - processMessage(message: Message, node: FlowNode): Message
+    }
 
-    Rel(mqtt_broker, flow, "MQTT сообщения")
-    Rel(flow, transform, "Нормализация событий")
-    Rel(transform, retry_buf, "Буфферинг")
-    Rel(transform, kafka_writer, "Отправляет в Kafka")
+    class TransformNode {
+        - nodeId: str
+        - scriptPath: str
+        - protocol: str
+        + transform(message: Message): TransformedMessage
+        + convertProtocol(source: str, target: str, data: dict): dict
+        + normalize(message: Message): NormalizedMessage
+        - loadScript(): Script
+        - executeScript(message: Message): Message
+    }
+
+    class LocalBuffer {
+        - storageType: str
+        - dbPath: str
+        - maxSize: int
+        - currentSize: int
+        + store(message: Message): bool
+        + retrieve(count: int): List[Message]
+        + delete(messageId: str): bool
+        + size(): int
+        + isFull(): bool
+        - checkCapacity()
+        - cleanOldMessages()
+    }
+
+    class KafkaWriter {
+        - producer: KafkaProducer
+        - bootstrapServers: List[str]
+        - topic: str
+        - compressionType: str
+        + connect()
+        + disconnect()
+        + send(message: Message): SendResult
+        + flush()
+        - handleSendError(error: Error)
+        - retry(message: Message, attempts: int): bool
+    }
+
+    class Message {
+        + messageId: str
+        + topic: str
+        + payload: dict
+        + timestamp: datetime
+        + metadata: dict
+    }
+
+    class TransformedMessage {
+        + messageId: str
+        + sourceProtocol: str
+        + targetProtocol: str
+        + payload: dict
+        + timestamp: datetime
+    }
+
+    class NormalizedMessage {
+        + messageId: str
+        + eventType: str
+        + source: str
+        + data: dict
+        + timestamp: datetime
+    }
+
+    class SendResult {
+        + success: bool
+        + partition: int
+        + offset: int
+        + error: str
+    }
+
+    ' Отношения
+    MqttBroker --> NodeREDFlow : отправляет MQTT сообщения
+    NodeREDFlow --> TransformNode : передает для нормализации
+    TransformNode --> LocalBuffer : сохраняет при offline
+    TransformNode --> KafkaWriter : отправляет в Kafka
+    LocalBuffer --> KafkaWriter : восстанавливает из буфера
+
+    MqttBroker ..> Message : получает
+    NodeREDFlow ..> Message : обрабатывает
+    TransformNode ..> Message : использует
+    TransformNode ..> TransformedMessage : создает
+    TransformNode ..> NormalizedMessage : создает
+    LocalBuffer ..> Message : хранит
+    KafkaWriter ..> NormalizedMessage : публикует
+    KafkaWriter ..> SendResult : возвращает
 }
 
 @enduml

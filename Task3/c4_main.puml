@@ -1,22 +1,101 @@
-@startuml Code
-!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+@startuml Code_UML
+' Data Ingest Service
 
-System_Boundary(ingest, "Data Ingest Service") {
+package "Data Ingest Service" {
 
-    Component(http_srv, "HTTPServer", "FastAPI", "Обработка HTTP POST/PUT событий")
-    Component(mqtt_client, "MQTTClient", "Go MQTT", "Подключение к локальному мосту")
+    class HTTPServer {
+        - app: FastAPI
+        - port: int
+        - routes: List[Route]
+        + start()
+        + stop()
+        + handlePostEvent(request: Request): Response
+        + handlePutEvent(request: Request): Response
+        - validateRequest(request: Request): bool
+    }
 
-    Component(router, "EventRouter", "Go", "Определяет тип события, нормализует структуру")
-    Component(validator, "SchemaValidator", "Python Pydantic", "Валидация сообщений")
+    class MQTTClient {
+        - client: MQTTClientLib
+        - broker_host: str
+        - broker_port: int
+        - topics: List[str]
+        + connect()
+        + disconnect()
+        + subscribe(topic: str)
+        + onMessage(topic: str, payload: bytes)
+        - reconnect()
+    }
 
-    Component(publisher, "QueuePublisher", "amqp/mqtt", "Публикация сообщений в брокер")
-    Component(logger, "StructuredLogger", "Python", "Логирование, трассировка")
+    class EventRouter {
+        - event_types: Map[str, EventType]
+        + route(event: RawEvent): NormalizedEvent
+        + determineEventType(event: RawEvent): EventType
+        + normalize(event: RawEvent): NormalizedEvent
+        - applyTransformation(event: RawEvent, eventType: EventType): NormalizedEvent
+    }
 
-    Rel(http_srv, router, "Передаёт payload")
-    Rel(mqtt_client, router, "Передаёт MQTT events")
-    Rel(router, validator, "Validate()")
-    Rel(router, publisher, "Publish(topic, message)")
-    Rel(router, logger, "Logs")
+    class SchemaValidator {
+        - schemas: Map[str, Schema]
+        + validate(event: NormalizedEvent): ValidationResult
+        + loadSchema(eventType: str): Schema
+        - checkRequired(event: NormalizedEvent, schema: Schema): bool
+        - checkTypes(event: NormalizedEvent, schema: Schema): bool
+    }
+
+    class QueuePublisher {
+        - connection: AMQPConnection
+        - channel: Channel
+        - exchange: str
+        + connect()
+        + disconnect()
+        + publish(topic: str, message: bytes): bool
+        - ensureConnection()
+        - handlePublishError(error: Error)
+    }
+
+    class StructuredLogger {
+        - level: LogLevel
+        - output: Output
+        + debug(message: str, context: dict)
+        + info(message: str, context: dict)
+        + warning(message: str, context: dict)
+        + error(message: str, context: dict)
+        - formatLog(level: LogLevel, message: str, context: dict): str
+    }
+
+    class RawEvent {
+        + source: str
+        + timestamp: datetime
+        + payload: dict
+    }
+
+    class NormalizedEvent {
+        + event_type: str
+        + source: str
+        + timestamp: datetime
+        + data: dict
+        + metadata: dict
+    }
+
+    class ValidationResult {
+        + is_valid: bool
+        + errors: List[str]
+    }
+
+    ' Отношения
+    HTTPServer --> EventRouter : передает payload
+    MQTTClient --> EventRouter : передает MQTT events
+    EventRouter --> SchemaValidator : validate()
+    EventRouter --> QueuePublisher : publish(topic, message)
+    EventRouter --> StructuredLogger : logs
+    SchemaValidator --> StructuredLogger : logs
+    QueuePublisher --> StructuredLogger : logs
+
+    EventRouter ..> RawEvent : использует
+    EventRouter ..> NormalizedEvent : создает
+    SchemaValidator ..> NormalizedEvent : проверяет
+    SchemaValidator ..> ValidationResult : возвращает
+    QueuePublisher ..> NormalizedEvent : публикует
 }
 
 @enduml
