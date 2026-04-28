@@ -1,0 +1,101 @@
+@startuml Code_UML
+' Data Ingest Service
+
+package "Data Ingest Service" {
+
+    class HTTPServer {
+        - app: FastAPI
+        - port: int
+        - routes: List[Route]
+        + start()
+        + stop()
+        + handlePostEvent(request: Request): Response
+        + handlePutEvent(request: Request): Response
+        - validateRequest(request: Request): bool
+    }
+
+    class MQTTClient {
+        - client: MQTTClientLib
+        - broker_host: str
+        - broker_port: int
+        - topics: List[str]
+        + connect()
+        + disconnect()
+        + subscribe(topic: str)
+        + onMessage(topic: str, payload: bytes)
+        - reconnect()
+    }
+
+    class EventRouter {
+        - event_types: Map[str, EventType]
+        + route(event: RawEvent): NormalizedEvent
+        + determineEventType(event: RawEvent): EventType
+        + normalize(event: RawEvent): NormalizedEvent
+        - applyTransformation(event: RawEvent, eventType: EventType): NormalizedEvent
+    }
+
+    class SchemaValidator {
+        - schemas: Map[str, Schema]
+        + validate(event: NormalizedEvent): ValidationResult
+        + loadSchema(eventType: str): Schema
+        - checkRequired(event: NormalizedEvent, schema: Schema): bool
+        - checkTypes(event: NormalizedEvent, schema: Schema): bool
+    }
+
+    class QueuePublisher {
+        - connection: AMQPConnection
+        - channel: Channel
+        - exchange: str
+        + connect()
+        + disconnect()
+        + publish(topic: str, message: bytes): bool
+        - ensureConnection()
+        - handlePublishError(error: Error)
+    }
+
+    class StructuredLogger {
+        - level: LogLevel
+        - output: Output
+        + debug(message: str, context: dict)
+        + info(message: str, context: dict)
+        + warning(message: str, context: dict)
+        + error(message: str, context: dict)
+        - formatLog(level: LogLevel, message: str, context: dict): str
+    }
+
+    class RawEvent {
+        + source: str
+        + timestamp: datetime
+        + payload: dict
+    }
+
+    class NormalizedEvent {
+        + event_type: str
+        + source: str
+        + timestamp: datetime
+        + data: dict
+        + metadata: dict
+    }
+
+    class ValidationResult {
+        + is_valid: bool
+        + errors: List[str]
+    }
+
+    ' Отношения
+    HTTPServer --> EventRouter : передает payload
+    MQTTClient --> EventRouter : передает MQTT events
+    EventRouter --> SchemaValidator : validate()
+    EventRouter --> QueuePublisher : publish(topic, message)
+    EventRouter --> StructuredLogger : logs
+    SchemaValidator --> StructuredLogger : logs
+    QueuePublisher --> StructuredLogger : logs
+
+    EventRouter ..> RawEvent : использует
+    EventRouter ..> NormalizedEvent : создает
+    SchemaValidator ..> NormalizedEvent : проверяет
+    SchemaValidator ..> ValidationResult : возвращает
+    QueuePublisher ..> NormalizedEvent : публикует
+}
+
+@enduml

@@ -1,0 +1,59 @@
+@startuml Component
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+System_Boundary(mvp, "АгроПром Х - Цифровая платформа (MVP)") {
+    Container(web_app, "Web Portal / API Gateway", "Node.js / FastAPI", "UI, REST API, WebSocket, маршрутизация запросов")
+
+    Container(auth, "Auth Service", "OAuth2 / JWT", "SSO, роли, авторизация, токены")
+
+    Container_Boundary(ingest, "Data Ingest Service") {
+        Component(ingest_http, "HTTP Events Receiver", "Python", "Приём событий от агентов, камер, шлюзов")
+        Component(ingest_mqtt, "MQTT Receiver", "Go", "Приём событий от фермерского MQTT-шлюза")
+        Component(ingest_router, "Event Router", "Go", "Маршрутизация и нормализация событий")
+        Component(ingest_validator, "Schema Validator", "Python", "Валидация сообщений (Pydantic схемы)")
+    }
+
+    Container(queue, "Message Queue", "RabbitMQ/MQTT", "Брокер событий")
+
+    Container_Boundary(processor, "Real-Time Processor") {
+        Component(incident_detector, "Incident Detector", "Python", "Выявление беспокойства, драк, давки, падений")
+        Component(rule_engine, "Rules Engine", "Python", "Пороговые правила, бизнес-логика")
+        Component(ml, "ML Module", "Python", "Модели от партнёров")
+        Component(event_writer, "Timeseries Writer", "Python", "Запись событий и метрик")
+        Component(notify_wrapper, "Notification Trigger", "Python", "Генерация уведомлений")
+    }
+
+    Container(storage, "Timeseries / Object Storage", "TimescaleDB + S3", "Телеметрия, метрики, индексы видео, файлы")
+
+    Container(notification, "Notification Service", "Serverless Node.js", "Push/SMS/Webhook")
+
+    Container(ui, "Analytics UI", "React + API", "Графики, отчёты, истории")
+
+    Container(monitoring, "Monitoring & Ops", "Grafana + Prometheus", "SLO, алерты, технический мониторинг")
+}
+
+Rel(web_app, auth, "OAuth2/JWT")
+Rel(web_app, ingest_http, "Админ-запросы / настройки")
+
+Rel(ingest_http, ingest_router, "Обработка событий")
+Rel(ingest_mqtt, ingest_router, "MQTT сообщения")
+Rel(ingest_router, ingest_validator, "Валидация")
+
+Rel(ingest_router, queue, "Публикация событий")
+
+Rel(queue, incident_detector, "Consume")
+Rel(incident_detector, ml, "ML")
+Rel(incident_detector, rule_engine, "Правила")
+
+Rel(rule_engine, notify_wrapper, "Триггер")
+Rel(notify_wrapper, notification, "Отправка уведомлений")
+
+Rel(event_writer, storage, "Запись метрик")
+Rel(incident_detector, event_writer, "События")
+
+Rel(ui, storage, "Чтение аналитики")
+Rel(monitoring, processor, "Метрики")
+Rel(monitoring, ingest, "Метрики")
+
+@enduml

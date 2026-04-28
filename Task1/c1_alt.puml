@@ -1,0 +1,60 @@
+@startuml Context
+
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+
+Person(director, "Директор хозяйства", "Управление через веб-портал")
+Person(mechanic, "Механик", "Мониторинг техники")
+Person(analyst, "Аналитик", "Работа с BI-системой")
+
+
+System_Boundary(farm1, "Свиноферма №1") {
+    System_Ext(cameras, "IP-камеры", "Видеонаблюдение за поголовьем")
+    System_Ext(sensors, "IoT датчики", "Температура, влажность, CO2")
+    System(iot_gateway, "IoT шлюз", "Node-RED на Edge устройстве", "Локальная обработка и фильтрация данных")
+}
+
+System_Boundary(farm2, "Свиноферма №2") {
+    System_Ext(cameras2, "IP-камеры", "Видеонаблюдение")
+    System_Ext(sensors2, "IoT датчики", "Телеметрия")
+    System(iot_gateway2, "IoT шлюз", "Node-RED на Edge устройстве")
+}
+
+System_Boundary(cloud, "Облачная инфраструктура (YandexCloud)") {
+    Person(employee, "Дежурный сотрудник платформы", "Управление платформой")
+
+    System(kafka, "Брокер сообщений", "Apache Kafka", "Центральная шина данных")
+    System(platform, "Платформа для мониторинга скота", "Обработка событий и инцидентов")
+    System(bi, "BI система", "Power BI", "Отчеты и визуализация")
+}
+
+System_Ext(video_analytics, "Сервис видеоаналитики", "ML-модели детекции инцидентов")
+
+' === Взаимосвязи с устройствами ===
+Rel(cameras, iot_gateway, "Видеопоток RTSP")
+Rel(sensors, iot_gateway, "Данные MQTT")
+Rel(iot_gateway, kafka, "События и метрики (MQTT/HTTPS)", "Интернет")
+
+Rel(cameras2, iot_gateway2, "Видеопоток RTSP")
+Rel(sensors2, iot_gateway2, "Данные MQTT")
+Rel(iot_gateway2, kafka, "События и метрики (MQTT/HTTPS)", "Интернет")
+
+' === Взаимосвязи между системами ===
+Rel(kafka, platform, "Подписка на события")
+Rel(platform, video_analytics, "Запросы на анализ видео (API)")
+Rel(video_analytics, platform, "Результаты анализа")
+Rel(platform, kafka, "Публикация обработанных данных")
+
+Rel(kafka, bi, "Потоковая аналитика")
+Rel(bi, kafka, "Агрегированные метрики")
+
+' === Взаимосвязи с пользователями ===
+Rel(employee, platform, "Управление и мониторинг", "HTTPS")
+Rel(platform, employee, "Уведомления об инцидентах", "Push/Email")
+
+Rel(director, bi, "Просмотр дашбордов и отчётов", "HTTPS")
+Rel(analyst, bi, "Анализ данных", "HTTPS")
+Rel(mechanic, platform, "Мониторинг техники", "HTTPS/Mobile")
+Rel(platform, mechanic, "Уведомления о неисправностях", "Push/SMS")
+
+@enduml
